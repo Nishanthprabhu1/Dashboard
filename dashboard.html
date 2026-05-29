@@ -1,0 +1,83 @@
+function doGet(e) {
+  var headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type"
+  };
+  
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Sheet1");
+    var rows = sheet.getDataRange().getValues();
+    var data = [];
+    
+    // Skip row 1 because it holds your structural column headers
+    for (var i = 1; i < rows.length; i++) {
+      if (!rows[i][0]) continue; // Skip blank logs safely
+      data.push({
+        date: rows[i][0],
+        time: rows[i][1],
+        table: rows[i][2],
+        itemName: rows[i][3],
+        qty: rows[i][4],
+        unitPrice: rows[i][5],
+        subtotal: rows[i][6],
+        orderTotal: rows[i][7],
+        status: rows[i][8]
+      });
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify({ "status": "success", "data": data }))
+                         .setMimeType(ContentService.MimeType.JSON)
+                         .setHeaders(headers);
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ "status": "error", "message": error.toString() }))
+                         .setMimeType(ContentService.MimeType.JSON)
+                         .setHeaders(headers);
+  }
+}
+
+function doPost(e) {
+  var headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type"
+  };
+  
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Sheet1");
+    var payload = JSON.parse(e.postData.contents);
+    
+    payload.items.forEach(function(item) {
+      sheet.appendRow([
+        payload.date,
+        payload.time,
+        payload.table,
+        item.name,
+        item.qty,
+        item.unitPrice,
+        item.subtotal,
+        payload.orderTotal,
+        "New"
+      ]);
+    });
+    
+    return ContentService.createTextOutput(JSON.stringify({ "status": "success" }))
+                         .setMimeType(ContentService.MimeType.JSON)
+                         .setHeaders(headers);
+                         
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ "status": "error", "message": error.toString() }))
+                         .setMimeType(ContentService.MimeType.JSON)
+                         .setHeaders(headers);
+  }
+}
+
+function doOptions(e) {
+  var headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "86400"
+  };
+  return ContentService.createTextOutput("").setMimeType(ContentService.MimeType.TEXT).setHeaders(headers);
+}
