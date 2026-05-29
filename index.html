@@ -1,83 +1,213 @@
-function doGet(e) {
-  var headers = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
-  };
-  
-  try {
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Sheet1");
-    var rows = sheet.getDataRange().getValues();
-    var data = [];
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Chef Nishanth — Orders Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --color-primary: #1a73e8;
+  --color-success: #2e7d32;
+  --color-warning: #e65100;
+  --color-text-main: #282c3f;
+  --color-text-muted: #686b78;
+  --color-bg-page: #f8f9fa;
+  --color-bg-card: #ffffff;
+  --color-border: #e9e9eb;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Poppins', sans-serif; background: var(--color-bg-page); color: var(--color-text-main); padding: 24px; }
+
+/* ── TOPBAR ── */
+.topbar { background: var(--color-primary); border-radius: var(--border-radius-md); padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.sheets-icon { width: 32px; height: 32px; background: #fff; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+.sheets-icon svg { width: 22px; height: 22px; }
+.topbar-title { color: #fff; font-size: 16px; font-weight: 600; }
+.topbar-sub { color: rgba(255,255,255,0.8); font-size: 12px; margin-top: 1px; }
+.topbar-live { background: rgba(255,255,255,0.2); color: #fff; border-radius: 20px; padding: 6px 14px; font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* ── STATS CARDS ── */
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.stat-card { background: var(--color-bg-card); border-radius: var(--border-radius-md); padding: 16px; border: 1px solid var(--color-border); box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+.stat-label { font-size: 12px; color: var(--color-text-muted); margin-bottom: 6px; font-weight: 500; }
+.stat-val { font-size: 24px; font-weight: 700; color: var(--color-text-main); }
+
+/* ── TABLE VIEW ── */
+.table-wrap { background: var(--color-bg-card); border-radius: var(--border-radius-lg); border: 1px solid var(--color-border); overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.03); margin-bottom: 20px; }
+.table-header { padding: 16px 20px; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; justify-content: space-between; background: #fafafa; }
+.table-header-title { font-size: 14px; font-weight: 600; color: var(--color-text-main); }
+.refresh-btn { background: #fff; border: 1px solid var(--color-border); padding: 6px 12px; border-radius: 6px; font-family: inherit; font-size: 12px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.refresh-btn:hover { background: #f5f5f5; }
+
+.grid-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+.grid-table th { background: #f1f3f4; color: var(--color-text-muted); font-weight: 600; padding: 12px 16px; border-bottom: 1px solid var(--color-border); border-right: 1px solid var(--color-border); font-size: 12px; }
+.grid-table td { padding: 12px 16px; border-bottom: 1px solid var(--color-border); border-right: 1px solid var(--color-border); color: var(--color-text-main); vertical-align: middle; }
+.grid-table tr:hover td { background: #f8f9fa; }
+.grid-table th:last-child, .grid-table td:last-child { border-right: none; }
+
+/* ── BADGES ── */
+.status-badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; display: inline-block; text-align: center; }
+.status-new { background: #e8f5e9; color: var(--color-success); }
+.status-prep { background: #fff3e0; color: var(--color-warning); }
+.status-done { background: #e3f2fd; color: #1565c0; }
+
+.loading-state { text-align: center; padding: 40px; color: var(--color-text-muted); font-size: 14px; }
+</style>
+</head>
+<body style="display: none;" id="dashboardContainer">
+
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="sheets-icon">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="2" fill="#34a853"/><rect x="6" y="8" width="12" height="1.5" rx="0.75" fill="white"/><rect x="6" y="11.5" width="12" height="1.5" rx="0.75" fill="white"/><rect x="6" y="15" width="8" height="1.5" rx="0.75" fill="white"/></svg>
+      </div>
+      <div>
+        <div class="topbar-title">Chef Nishanth — Live Orders Dashboard</div>
+        <div class="topbar-sub">Connected to Web QR Menu · orders_log</div>
+      </div>
+    </div>
+    <div class="topbar-live"><div class="live-dot"></div>Live Monitoring</div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-label">Total Logs Tracked</div><div class="stat-val" id="statTotalOrders">0</div></div>
+    <div class="stat-card"><div class="stat-label">Total Revenue Processed</div><div class="stat-val" id="statRevenue">₹0</div></div>
+    <div class="stat-card"><div class="stat-label">Active Serving Tables</div><div class="stat-val" id="statActiveTables">0</div></div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-header">
+      <div class="table-header-title">Live Spreadsheet Stream (Sheet1)</div>
+      <button class="refresh-btn" onclick="fetchDashboardData()">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        Refresh Feed
+      </button>
+    </div>
     
-    // Skip row 1 because it holds your structural column headers
-    for (var i = 1; i < rows.length; i++) {
-      if (!rows[i][0]) continue; // Skip blank logs safely
-      data.push({
-        date: rows[i][0],
-        time: rows[i][1],
-        table: rows[i][2],
-        itemName: rows[i][3],
-        qty: rows[i][4],
-        unitPrice: rows[i][5],
-        subtotal: rows[i][6],
-        orderTotal: rows[i][7],
-        status: rows[i][8]
-      });
+    <div id="loadingElement" class="loading-state">Syncing cloud spreadsheet ecosystem...</div>
+    
+    <table class="grid-table" id="ordersTable" style="display: none;">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Time</th>
+          <th>Table</th>
+          <th>Dish Item Details</th>
+          <th>Qty</th>
+          <th>Unit Price</th>
+          <th>Subtotal</th>
+          <th>Bill Amount</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        </tbody>
+    </table>
+  </div>
+
+<script>
+  const MANAGER_PIN = "7019"; 
+  const SCRIPT_API_URL = 'https://script.google.com/macros/s/AKfycbx1NKLHHvtUAUKvI6LHVAKlfS4uRf24tgRxWln3FXtw2YPmueXgIp-kphYIKpQnOuAiBA/exec';
+
+  function checkAccess() {
+    const enteredPin = prompt("🔑 Access Restricted. Enter Manager PIN to view Dashboard:");
+    
+    if (enteredPin === MANAGER_PIN) {
+      document.getElementById('dashboardContainer').style.display = 'block';
+      fetchDashboardData();
+    } else {
+      alert("❌ Incorrect PIN. Access Denied.");
+      document.body.style.display = 'block'; 
+      document.body.innerHTML = `
+        <div style="text-align:center; margin-top:120px; font-family:'Poppins',sans-serif; padding: 20px;">
+          <h1 style="color:#e23744; font-size: 32px; margin-bottom: 10px;">🔒 Access Denied</h1>
+          <p style="color:#686b78; font-size: 15px;">This analytics channel is completely blocked to external customer configurations traffic.</p>
+          <button onclick="location.reload()" style="margin-top:24px; padding:12px 24px; background:#1a73e8; color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:inherit; font-weight:600; box-shadow: 0 4px 12px rgba(26,115,232,0.3);">Re-Authenticate</button>
+        </div>
+      `;
     }
-    
-    return ContentService.createTextOutput(JSON.stringify({ "status": "success", "data": data }))
-                         .setMimeType(ContentService.MimeType.JSON)
-                         .setHeaders(headers);
-  } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ "status": "error", "message": error.toString() }))
-                         .setMimeType(ContentService.MimeType.JSON)
-                         .setHeaders(headers);
   }
-}
 
-function doPost(e) {
-  var headers = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
-  };
+  async function fetchDashboardData() {
+    const loadingEl = document.getElementById('loadingElement');
+    const tableEl = document.getElementById('ordersTable');
+    const tbody = document.getElementById('tableBody');
+    
+    try {
+      loadingEl.style.display = 'block';
+      loadingEl.textContent = 'Querying direct database grid points...';
+      
+      const response = await fetch(`${SCRIPT_API_URL}?action=readLogs`);
+      if (!response.ok) throw new Error("Cloud network data serialization anomaly.");
+      
+      const result = await response.json();
+      
+      if (result.status === 'success') {
+        const rows = result.data;
+        tbody.innerHTML = '';
+        
+        if (rows.length === 0) {
+          loadingEl.textContent = 'Database pipeline verified. No orders captured yet today.';
+          tableEl.style.display = 'none';
+          return;
+        }
+
+        let totalRevenue = 0;
+        let uniqueTables = new Set();
+
+        rows.reverse().forEach(row => {
+          const subtotal = parseFloat(row.subtotal) || 0;
+          totalRevenue += subtotal;
+          if(row.table) uniqueTables.add(row.table);
+
+          let statusClass = 'status-new';
+          if (row.status === 'Preparing') statusClass = 'status-prep';
+          if (row.status === 'Served' || row.status === 'Done') statusClass = 'status-done';
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><b>${row.date || ''}</b></td>
+            <td>${row.time || ''}</td>
+            <td><span style="color: #fc8019; font-weight:600;">${row.table || ''}</span></td>
+            <td>${row.itemName || ''}</td>
+            <td>${row.qty || 0}</td>
+            <td>₹${row.unitPrice || 0}</td>
+            <td>₹${subtotal}</td>
+            <td><b>₹${row.orderTotal || 0}</b></td>
+            <td><span class="status-badge ${statusClass}">${row.status || 'New'}</span></td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        document.getElementById('statTotalOrders').textContent = rows.length;
+        document.getElementById('statRevenue').textContent = '₹' + totalRevenue.toLocaleString('en-IN');
+        document.getElementById('statActiveTables').textContent = uniqueTables.size;
+
+        loadingEl.style.display = 'none';
+        tableEl.style.display = 'table';
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error("Dashboard engine rendering error:", error);
+      loadingEl.textContent = 'Database sync failure. Verify system macro execution context settings parameters. ❌';
+    }
+  }
+
+  setInterval(() => {
+    if(document.getElementById('ordersTable').style.display === 'table') {
+      fetchDashboardData();
+    }
+  }, 15000);
   
-  try {
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Sheet1");
-    var payload = JSON.parse(e.postData.contents);
-    
-    payload.items.forEach(function(item) {
-      sheet.appendRow([
-        payload.date,
-        payload.time,
-        payload.table,
-        item.name,
-        item.qty,
-        item.unitPrice,
-        item.subtotal,
-        payload.orderTotal,
-        "New"
-      ]);
-    });
-    
-    return ContentService.createTextOutput(JSON.stringify({ "status": "success" }))
-                         .setMimeType(ContentService.MimeType.JSON)
-                         .setHeaders(headers);
-                         
-  } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ "status": "error", "message": error.toString() }))
-                         .setMimeType(ContentService.MimeType.JSON)
-                         .setHeaders(headers);
-  }
-}
-
-function doOptions(e) {
-  var headers = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Max-Age": "86400"
-  };
-  return ContentService.createTextOutput("").setMimeType(ContentService.MimeType.TEXT).setHeaders(headers);
-}
+  window.onload = checkAccess;
+</script>
+</body>
+</html>
