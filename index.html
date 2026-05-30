@@ -97,6 +97,9 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
 .grid-table th { background: #1C2331; color: var(--text-muted); padding: 16px 20px; font-size: 12px; }
 .grid-table td { padding: 16px 20px; border-bottom: 1px solid var(--border-line); }
 .status-pill { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; display: inline-block; background: rgba(72, 196, 121, 0.1); color: var(--color-green); }
+.bill-status-pill { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; display: inline-block; }
+.bill-status-pill.unpaid { background: rgba(252, 128, 25, 0.12); color: var(--color-orange); border: 1px solid rgba(252,128,25,0.3); }
+.bill-status-pill.paid { background: rgba(72, 196, 121, 0.12); color: var(--color-green); border: 1px solid rgba(72,196,121,0.3); }
 .loading-mask { text-align: center; padding: 60px; color: var(--text-muted); font-size: 14px; }
 
 /* ── MODAL BILL WINDOW ── */
@@ -212,6 +215,7 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
               <th>Subtotal</th>
               <th>Bill Amount</th>
               <th>Status</th>
+              <th>Bill Status</th>
             </tr>
           </thead>
           <tbody id="tableBody"></tbody>
@@ -363,27 +367,37 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
         const orderStatus = columns[8] || 'New';
         const globalPaidStatus = columns[9] || 'Unpaid';
 
-        if (globalPaidStatus === "Paid") continue;
-        // ✅ Also skip rows for tables already paid on this device (sheet may not be updated yet)
-        if (locallyPaidTables.has(tableNum)) continue;
+        // Determine if this row is paid (sheet says Paid OR locally marked paid on this device)
+        const isPaidRow = (globalPaidStatus === "Paid") || locallyPaidTables.has(tableNum);
 
-        totalLiveUnpaidOrdersCount++;
-        runningRevenueTotal += subtotal;
+        if (!isPaidRow) {
+          // Only count unpaid rows in KPIs and floor hash
+          totalLiveUnpaidOrdersCount++;
+          runningRevenueTotal += subtotal;
 
-        const cat = MENU_MAP[dishName] || 'Mains';
-        if (categoryDistributionMap[cat] !== undefined) categoryDistributionMap[cat] += subtotal;
+          const cat = MENU_MAP[dishName] || 'Mains';
+          if (categoryDistributionMap[cat] !== undefined) categoryDistributionMap[cat] += subtotal;
 
-        const hourSection = timeMarker.split(':')[0] + ' ' + timeMarker.split(' ')[1];
-        timeDistributionMatrix[hourSection] = (timeDistributionMatrix[hourSection] || 0) + subtotal;
+          const hourSection = timeMarker.split(':')[0] + ' ' + timeMarker.split(' ')[1];
+          timeDistributionMatrix[hourSection] = (timeDistributionMatrix[hourSection] || 0) + subtotal;
 
-        if (tableNum >= 1 && tableNum <= 12) {
-          freshFloorHash[tableNum].occupied = true;
-          freshFloorHash[tableNum].total += subtotal;
-          freshFloorHash[tableNum].items.push({ dishName, qty, subtotal, price });
+          if (tableNum >= 1 && tableNum <= 12) {
+            freshFloorHash[tableNum].occupied = true;
+            freshFloorHash[tableNum].total += subtotal;
+            freshFloorHash[tableNum].items.push({ dishName, qty, subtotal, price });
+          }
         }
 
+        // ✅ Show ALL rows in the audit log — paid rows get a green "Paid" badge,
+        // unpaid rows get an orange "Unpaid" badge. Rows stay permanently
+        // as Paid once marked — no flicker back possible.
+        const billStatusHtml = isPaidRow
+          ? `<span class="bill-status-pill paid">✅ Paid</span>`
+          : `<span class="bill-status-pill unpaid">⏳ Unpaid</span>`;
+
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td><b>${dateMarker}</b></td><td>${timeMarker}</td><td><span style="color:#fc8019;font-weight:600;">Table ${tableNum}</span></td><td>${dishName}</td><td>${qty}</td><td>₹${price}</td><td>₹${subtotal}</td><td><b>₹${completeBill}</b></td><td><span class="status-pill">${orderStatus}</span></td>`;
+        tr.style.opacity = isPaidRow ? '0.5' : '1';
+        tr.innerHTML = `<td><b>${dateMarker}</b></td><td>${timeMarker}</td><td><span style="color:#fc8019;font-weight:600;">Table ${tableNum}</span></td><td>${dishName}</td><td>${qty}</td><td>₹${price}</td><td>₹${subtotal}</td><td><b>₹${completeBill}</b></td><td><span class="status-pill">${orderStatus}</span></td><td>${billStatusHtml}</td>`;
         tableBody.appendChild(tr);
       }
 
