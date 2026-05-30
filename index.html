@@ -144,15 +144,15 @@ body { font-family: 'Poppins', sans-serif; background: var(--color-bg-page); col
       loadingEl.style.display = 'block';
       loadingEl.textContent = 'Querying direct database grid points...';
       
+      // FIX: Standardize request redirects to let Google stream content natively across repos
       const response = await fetch(SCRIPT_API_URL, {
         method: 'GET',
-        headers: { 'Content-Type': 'text/plain' }
+        redirect: 'follow'
       });
       
       if (!response.ok) throw new Error("Cloud network data serialization anomaly.");
       
-      const txt = await response.text();
-      const result = JSON.parse(txt);
+      const result = await response.json();
       
       if (result.status === 'success') {
         const rows = result.data;
