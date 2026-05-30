@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Chef Nishanth — Enterprise Control Center</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root {
+  --bg-dark-core: #0B0E14;
+  --bg-dark-surface: #141923;
+  --bg-dark-card: #1A202C;
+  --text-main: #FFFFFF;
+  --text-muted: #8A94A6;
+  --color-green: #48C479;
+  --color-purple: #A78BFA;
+  --color-blue: #60A5FA;
+  --color-orange: #FC8019;
+  --color-red: #EF4444;
+  --border-line: #2D3748;
+  --font-base: 'Poppins', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-base); }
+body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100vh; display: flex; overflow-x: hidden; }
+
+/* ── SIDEBAR NAVIGATION ── */
+.sidebar { width: 280px; background: var(--bg-dark-surface); border-right: 1px solid var(--border-line); display: flex; flex-direction: column; padding: 24px; position: fixed; height: 100vh; z-index: 100; }
+.brand-box { display: flex; align-items: center; gap: 12px; margin-bottom: 40px; }
+.brand-logo { font-size: 24px; }
+.brand-name { font-size: 18px; font-weight: 700; background: linear-gradient(to right, #FC8019, #FFAB68); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.nav-list { display: flex; flex-direction: column; gap: 8px; list-style: none; flex: 1; }
+.nav-item { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 10px; color: var(--text-muted); cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s ease; }
+.nav-item:hover, .nav-item.active { background: #FC8019; color: var(--text-main); }
+
+/* ── MAIN CONTENT SYSTEM ── */
+.main-content { margin-left: 280px; flex: 1; padding: 32px; max-width: calc(100vw - 280px); }
+.header-panel { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+.welcome-msg h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+.welcome-msg p { color: var(--text-muted); font-size: 13px; }
+.header-actions { display: flex; align-items: center; gap: 16px; }
+.live-status { background: rgba(72, 196, 121, 0.1); color: var(--color-green); border: 1px solid rgba(72, 196, 121, 0.2); border-radius: 20px; padding: 6px 16px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.live-pulse { width: 8px; height: 8px; background: var(--color-green); border-radius: 50%; animation: pulse-glow 1.5s infinite; }
+@keyframes pulse-glow { 0% { box-shadow: 0 0 0 0 rgba(72, 196, 121, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(72, 196, 121, 0); } 100% { box-shadow: 0 0 0 0 rgba(72, 196, 121, 0); } }
+.refresh-trigger { background: var(--bg-dark-surface); color: var(--text-main); border: 1px solid var(--border-line); border-radius: 10px; padding: 10px 20px; font-size: 13px; font-weight: 500; cursor: pointer; }
+
+/* ── KPI METRICS CARDS ── */
+.metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 32px; }
+.kpi-card { background: var(--bg-dark-surface); border: 1px solid var(--border-line); border-radius: 16px; padding: 24px; position: relative; }
+.kpi-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; }
+.kpi-card.sales::before { background: var(--color-green); }
+.kpi-card.orders::before { background: var(--color-purple); }
+.kpi-card.tables::before { background: var(--color-orange); }
+.kpi-info h3 { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; font-weight: 500; }
+.kpi-info h2 { font-size: 28px; font-weight: 700; }
+
+/* ── CHARTS INTERFACES ── */
+.charts-grid { display: grid; grid-template-columns: 4fr 5fr; gap: 24px; margin-bottom: 32px; }
+.chart-container { background: var(--bg-dark-surface); border: 1px solid var(--border-line); border-radius: 16px; padding: 24px; min-height: 300px; }
+.chart-title { font-size: 14px; font-weight: 600; margin-bottom: 16px; }
+.canvas-holder { height: 220px; position: relative; }
+
+/* ── LIVE SEAT OCCUPANCY FLOOR TAB ── */
+.section-headline { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+.floor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+.table-cube { background: var(--bg-dark-surface); border: 2px solid var(--border-line); border-radius: 14px; padding: 24px 20px; text-align: center; cursor: pointer; transition: all 0.2s ease; }
+.table-cube:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
+.table-cube.occupied { border-color: var(--color-orange); background: linear-gradient(145deg, #141923, #1A202C); }
+.cube-num { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+.cube-status { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+.table-cube.vacant .cube-status { color: var(--color-green); }
+.table-cube.occupied .cube-status { color: var(--color-orange); }
+.cube-bill-label { font-size: 11px; color: var(--text-muted); }
+.cube-bill-val { font-size: 18px; font-weight: 700; color: var(--text-main); margin-top: 2px; }
+.table-cube.vacant .cube-bill-val { color: rgba(255,255,255,0.1); }
+
+/* ── VIEW PANELS & DATA GRIDS ── */
+.view-panel { display: none; }
+.view-panel.active-panel { display: block; }
+.table-card { background: var(--bg-dark-surface); border: 1px solid var(--border-line); border-radius: 16px; overflow: hidden; }
+.grid-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+.grid-table th { background: #1C2331; color: var(--text-muted); padding: 16px 20px; font-size: 12px; }
+.grid-table td { padding: 16px 20px; border-bottom: 1px solid var(--border-line); }
+.status-pill { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; display: inline-block; background: rgba(72, 196, 121, 0.1); color: var(--color-green); }
+.loading-mask { text-align: center; padding: 60px; color: var(--text-muted); font-size: 14px; }
+
+/* ── MODAL BILL WINDOW ── */
+.modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(4px); z-index: 1000; display: none; align-items: center; justify-content: center; }
+.modal-mask.show { display: flex; }
+.bill-popup { background: var(--bg-dark-surface); border: 1px solid var(--border-line); width: 100%; max-width: 420px; border-radius: 20px; overflow: hidden; }
+.bill-pop-header { background: #1C2331; padding: 20px; border-bottom: 1px solid var(--border-line); display: flex; justify-content: space-between; align-items: center; }
+.bill-pop-header h2 { font-size: 16px; font-weight: 700; }
+.close-pop { font-size: 22px; cursor: pointer; color: var(--text-muted); }
+.bill-pop-body { padding: 20px; max-height: 260px; overflow-y: auto; }
+.bill-pop-item-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 12px; color: rgba(255,255,255,0.9); }
+.bill-pop-footer { padding: 20px; border-top: 1px solid var(--border-line); background: rgba(0,0,0,0.1); }
+.bill-pop-total-line { display: flex; justify-content: space-between; font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+.paid-action-btn { width: 100%; background: var(--color-green); color: #fff; border: none; border-radius: 10px; padding: 14px; font-size: 14px; font-weight: 700; cursor: pointer; }
+</style>
+</head>
+<body style="display: none;" id="authWrapper">
+
+  <nav class="sidebar">
+    <div class="brand-box"><span class="brand-logo">🧑‍🍳</span><span class="brand-name">Chef Nishanth</span></div>
+    <ul class="nav-list">
+      <li class="nav-item active" onclick="switchTab('dashboard', this)">🖥️ Dashboard</li>
+      <li class="nav-item" onclick="switchTab('logs', this)">📋 Order Analytics Grid</li>
+      <li class="nav-item" onclick="switchTab('floor', this)">🪑 Live Table Plan</li>
+    </ul>
+  </nav>
+
+  <main class="main-content">
+    
+    <header class="header-panel">
+      <div class="welcome-msg">
+        <h1 id="panelContextTitle">Welcome Back, Chef Nishanth 👋</h1>
+        <p>Live Restaurant Cloud Control Room · Church Street Operations</p>
+      </div>
+      <div class="header-actions">
+        <div class="live-status"><div class="live-pulse"></div>Live Feed</div>
+        <button class="refresh-trigger" onclick="pullEcosystemData()">Sync System Feed</button>
+      </div>
+    </header>
+
+    <div id="dashboardView" class="view-panel active-panel">
+      <section class="metrics-grid">
+        <div class="kpi-card sales"><div class="kpi-info"><h3>Today's Gross Sales</h3><h2 id="kpiSales">₹0</h2></div></div>
+        <div class="kpi-card orders"><div class="kpi-info"><h3>Total Tickets Logs</h3><h2 id="kpiOrders">0</h2></div></div>
+        <div class="kpi-card tables"><div class="kpi-info"><h3>Active Dining Tables</h3><h2 id="kpiTables">0</h2></div></div>
+      </section>
+
+      <section class="charts-grid">
+        <div class="chart-container">
+          <div class="chart-title">Sales Streams Mix</div>
+          <div class="canvas-holder"><canvas id="mixChartMesh"></canvas></div>
+        </div>
+        <div class="chart-container">
+          <div class="chart-title">Hourly Sales Velocity</div>
+          <div class="canvas-holder"><canvas id="velocityChartMesh"></canvas></div>
+        </div>
+      </section>
+    </div>
+
+    <div id="logsView" class="view-panel">
+      <div class="table-card">
+        <div id="loadingElement" class="loading-mask">Querying direct data point matrices...</div>
+        <table class="grid-table" id="ordersTable" style="display: none;">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Table</th>
+              <th>Dish Item Details</th>
+              <th>Qty</th>
+              <th>Unit Price</th>
+              <th>Subtotal</th>
+              <th>Bill Amount</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="floorView" class="view-panel">
+      <div class="section-headline">🪑 Visual Seating Layout & Live Settlements</div>
+      <section class="floor-grid" id="floorGridMesh">
+        </section>
+    </div>
+
+  </main>
+
+  <div class="modal-mask" id="billModalOverlay">
+    <div class="bill-popup">
+      <div class="bill-pop-header">
+        <h2 id="modalTitleLabel">Table Details</h2>
+        <span class="close-pop" onclick="closeBillModal()">×</span>
+      </div>
+      <div class="bill-pop-body" id="modalBillItemsContainer"></div>
+      <div class="bill-pop-footer">
+        <div class="bill-pop-total-line">
+          <span>Amount Due:</span>
+          <span id="modalBillTotalLabel">₹0</span>
+        </div>
+        <button class="paid-action-btn" id="modalPaidActionButton">💳 Mark as Bill Paid</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const MANAGER_PIN = "7019";
+  const SPREADSHEET_ID = '1sFdtQFP7BdQQJ_0_SGbsqGh5kHV_VwvdtG3261-3-vk';
+  
+  // PASTE YOUR LATEST DEPLOYED LIVE APPS SCRIPT EXEC MACRO URL HERE:
+  const SCRIPT_API_URL = 'https://script.google.com/macros/s/AKfycbzzqQ-t9Pz16Bv5hIAn1Dly9F0b-u7vWwMv1_Mv5E7B7V5N9A7E1C7Rhs-PAgT3fTUD_-jR-UZ0aA/exec';
+
+  const MENU_MAP = {
+    'Crispy Chicken Lollipop': 'Starters', 'Paneer Tikka Royale': 'Starters', 'Mutton Seekh Kebab': 'Starters',
+    'Butter Chicken Masala': 'Mains', 'Palak Paneer Nishanth Style': 'Mains',
+    'Hyderabadi Dum Gosht Biryani': 'Biryani', 'Butter Naan': 'Breads', 'Masala Chai': 'Drinks'
+  };
+
+  let mixChartInstance = null;
+  let velocityChartInstance = null;
+
+  function checkAccess() {
+    const pin = prompt("🔑 Access Restricted. Enter Executive Manager PIN:");
+    if (pin === MANAGER_PIN) {
+      document.getElementById('authWrapper').style.display = 'flex';
+      pullEcosystemData();
+    } else {
+      alert("❌ Access Denied.");
+      location.reload();
+    }
+  }
+
+  function switchTab(target, menuButton) {
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.view-panel').forEach(el => el.classList.remove('active-panel'));
+    
+    menuButton.classList.add('active');
+    
+    if(target === 'dashboard') {
+      document.getElementById('dashboardView').classList.add('active-panel');
+      document.getElementById('panelContextTitle').textContent = "Welcome Back, Chef Nishanth 👋";
+    } else if(target === 'logs') {
+      document.getElementById('logsView').classList.add('active-panel');
+      document.getElementById('panelContextTitle').textContent = "Database Audit Log System";
+    } else {
+      document.getElementById('floorView').classList.add('active-panel');
+      document.getElementById('panelContextTitle').textContent = "Live Restaurant Seating Grid";
+    }
+  }
+
+  async function pullEcosystemData() {
+    const loadingMask = document.getElementById('loadingElement');
+    const ordersTable = document.getElementById('ordersTable');
+    const tableBody = document.getElementById('tableBody');
+    
+    try {
+      loadingMask.style.display = 'block';
+      
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=Sheet1`;
+      const response = await fetch(csvUrl);
+      if (!response.ok) throw new Error("Fetch failure");
+      
+      const csvText = await response.text();
+      const rawLines = csvText.split(/\r?\n/);
+      const lines = rawLines.map(line => line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(cell => cell.replace(/^"|"$/g, '').trim()));
+
+      tableBody.innerHTML = '';
+      
+      let runningRevenueTotal = 0;
+      let uniqueActiveTablesCount = 0;
+      let totalLiveUnpaidOrdersCount = 0;
+
+      let categoryDistributionMap = { 'Starters': 0, 'Mains': 0, 'Biryani': 0, 'Breads': 0, 'Drinks': 0 };
+      let timeDistributionMatrix = {};
+      let tableBillingTrackingHash = {};
+
+      for(let t = 1; t <= 12; t++) {
+        tableBillingTrackingHash[t] = { items: [], total: 0, occupied: false };
+      }
+
+      for(let i = 1; i < lines.length; i++) {
+        const columns = lines[i];
+        if(!columns[0] || columns.length < 7) continue;
+
+        const dateMarker = columns[0];
+        const timeMarker = columns[1];
+        const tableNum = parseInt(columns[2].replace(/\D/g, '')) || 0;
+        const dishName = columns[3];
+        const qty = parseInt(columns[4]) || 0;
+        const price = parseFloat(columns[5]) || 0;
+        const subtotal = parseFloat(columns[6]) || 0;
+        const completeBill = columns[7] || '0';
+        const orderStatus = columns[8] || 'New';
+        const globalPaidStatus = columns[9] || 'Unpaid'; // Reading Column J
+
+        // IF THE ORDER IS GLOBALLY PAID, BYPASS ITS ACCUMULATION ON DASHBOARD AND TABLES INSTANTLY
+        if(globalPaidStatus === "Paid") continue;
+
+        totalLiveUnpaidOrdersCount++;
+        runningRevenueTotal += subtotal;
+
+        const cat = MENU_MAP[dishName] || 'Mains';
+        if(categoryDistributionMap[cat] !== undefined) categoryDistributionMap[cat] += subtotal;
+
+        const hourSection = timeMarker.split(':')[0] + ' ' + timeMarker.split(' ')[1];
+        timeDistributionMatrix[hourSection] = (timeDistributionMatrix[hourSection] || 0) + subtotal;
+
+        if(tableNum >= 1 && tableNum <= 12) {
+          tableBillingTrackingHash[tableNum].occupied = true;
+          tableBillingTrackingHash[tableNum].total += subtotal;
+          tableBillingTrackingHash[tableNum].items.push({ dishName, qty, subtotal });
+        }
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td><b>${dateMarker}</b></td><td>${timeMarker}</td><td><span style="color:#fc8019;font-weight:600;">Table ${tableNum}</span></td><td>${dishName}</td><td>${qty}</td><td>₹${price}</td><td>₹${subtotal}</td><td><b>₹${completeBill}</b></td><td><span class="status-pill">${orderStatus}</span></td>`;
+        tableBody.appendChild(tr);
+      }
+
+      for(let t = 1; t <= 12; t++) {
+        if(tableBillingTrackingHash[t].occupied) uniqueActiveTablesCount++;
+      }
+
+      document.getElementById('kpiSales').textContent = '₹' + runningRevenueTotal.toLocaleString('en-IN');
+      document.getElementById('kpiOrders').textContent = totalLiveUnpaidOrdersCount;
+      document.getElementById('kpiTables').textContent = uniqueActiveTablesCount;
+
+      renderFloorPlanVisualMesh(tableBillingTrackingHash);
+      renderMixMeshChart(categoryDistributionMap);
+      renderVelocityMeshChart(timeDistributionMatrix);
+
+      loadingMask.style.display = 'none';
+      ordersTable.style.display = 'table';
+      
+    } catch (error) {
+      console.error(error);
+      loadingMask.textContent = 'Ecosystem visualization failure. ❌';
+    }
+  }
+
+  function renderFloorPlanVisualMesh(floorHash) {
+    const meshContainer = document.getElementById('floorGridMesh');
+    meshContainer.innerHTML = '';
+
+    for(let t = 1; t <= 12; t++) {
+      const data = floorHash[t];
+      const isOccupied = data.occupied;
+      
+      const card = document.createElement('div');
+      card.className = `table-cube ${isOccupied ? 'occupied' : 'vacant'}`;
+      card.innerHTML = `
+        <div class="cube-num">Table ${t}</div>
+        <div class="cube-status">${isOccupied ? '⚠️ Occupied' : '🟢 Available'}</div>
+        <div class="cube-bill-label">Bill till now</div>
+        <div class="cube-bill-val">${isOccupied ? '₹' + data.total.toLocaleString('en-IN') : '—'}</div>
+      `;
+      
+      card.onclick = () => openBillDetailsPopupModal(t, data);
+      meshContainer.appendChild(card);
+    }
+  }
+
+  function openBillDetailsPopupModal(tableNum, tableData) {
+    const modal = document.getElementById('billModalOverlay');
+    document.getElementById('modalTitleLabel').textContent = `POS Terminal · Settle Table ${tableNum}`;
+    
+    const container = document.getElementById('modalBillItemsContainer');
+    container.innerHTML = '';
+
+    if(!tableData.occupied) {
+      container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;">Table is currently empty.</div>';
+      document.getElementById('modalBillTotalLabel').textContent = '₹0';
+      document.getElementById('modalPaidActionButton').style.display = 'none';
+    } else {
+      tableData.items.forEach(i => {
+        const r = document.createElement('div');
+        r.className = 'bill-pop-item-row';
+        r.innerHTML = `<span>${i.dishName} <b>(x${i.qty})</b></span><span>₹${i.subtotal}</span>`;
+        container.appendChild(r);
+      });
+
+      document.getElementById('modalBillTotalLabel').textContent = `₹${tableData.total.toLocaleString('en-IN')}`;
+      
+      const actionBtn = document.getElementById('modalPaidActionButton');
+      actionBtn.style.display = 'block';
+      actionBtn.onclick = () => executeGlobalPaymentSettlement(tableNum);
+    }
+    modal.classList.add('show');
+  }
+
+  function closeBillModal() {
+    document.getElementById('billModalOverlay').classList.remove('show');
+  }
+
+  async function executeGlobalPaymentSettlement(tableNum) {
+    if(!confirm(`💳 Set Table ${tableNum} to paid? This clears it across all kitchen devices instantly.`)) return;
+    
+    closeBillModal();
+    document.getElementById('loadingElement').style.display = 'block';
+    document.getElementById('loadingElement').textContent = 'Broadcasting global settlement packet...';
+
+    try {
+      // SENDS A TRUE POST DEPLOYMENT WEBHOOK DIRECT TO THE GOOGLE SHEET TO ATOMIZE COLUMN J VALUES FOR EVERY SERVER
+      const response = await fetch(SCRIPT_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: "settleTable", table: tableNum })
+      });
+      
+      pullEcosystemData(); // Instantly pull refreshed spreadsheet ecosystem state rows
+    } catch(err) {
+      console.error(err);
+      pullEcosystemData();
+    }
+  }
+
+  function renderMixMeshChart(mixData) {
+    const el = document.getElementById('mixChartMesh').getContext('2d');
+    if (mixChartInstance) mixChartInstance.destroy();
+    mixChartInstance = new Chart(el, {
+      type: 'doughnut',
+      data: { labels: Object.keys(mixData), datasets: [{ data: Object.values(mixData), backgroundColor: ['#48C479', '#A78BFA', '#60A5FA', '#F59E0B', '#EF4444'], borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#8A94A6', font: { family: 'Poppins', size: 10 } } } } }
+    });
+  }
+
+  function renderVelocityMeshChart(timeData) {
+    const el = document.getElementById('velocityChartMesh').getContext('2d');
+    if (velocityChartInstance) velocityChartInstance.destroy();
+    velocityChartInstance = new Chart(el, {
+      type: 'bar',
+      data: { labels: Object.keys(timeData), datasets: [{ data: Object.values(timeData), backgroundColor: '#FC8019', borderRadius: 4 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8A94A6', font: { size: 9 } }, grid: { display: false } }, y: { ticks: { color: '#8A94A6', font: { size: 9 } }, grid: { color: '#2D3748' } } } }
+    });
+  }
+
+  setInterval(() => { pullEcosystemData(); }, 15000);
+  window.onload = checkAccess;
+</script>
+</body>
+</html>
