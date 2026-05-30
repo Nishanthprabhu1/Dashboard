@@ -114,7 +114,8 @@ body { font-family: 'Poppins', sans-serif; background: var(--color-bg-page); col
 
 <script>
   const MANAGER_PIN = "7019"; 
-  const WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbzZ2zD5LzfrdLyQGGHgevXCCKlWqmr8Hcyx4L8s-WuDzzZYnuYEHWNUasco5lrIqMQV/exec';
+  const SCRIPT_API_URL = 'https://script.google.com/macros/s/AKfycbzZ2zD5LzfrdLyQGGHgevXCCKlWqmr8Hcyx4L8s-WuDzzZYnuYEHWNUasco5lrIqMQV/exec';
+
   function checkAccess() {
     const enteredPin = prompt("🔑 Access Restricted. Enter Manager PIN to view Dashboard:");
     
@@ -143,10 +144,15 @@ body { font-family: 'Poppins', sans-serif; background: var(--color-bg-page); col
       loadingEl.style.display = 'block';
       loadingEl.textContent = 'Querying direct database grid points...';
       
-      const response = await fetch(SCRIPT_API_URL);
+      const response = await fetch(SCRIPT_API_URL, {
+        method: 'GET',
+        headers: { 'Content-Type': 'text/plain' }
+      });
+      
       if (!response.ok) throw new Error("Cloud network data serialization anomaly.");
       
-      const result = await response.json();
+      const txt = await response.text();
+      const result = JSON.parse(txt);
       
       if (result.status === 'success') {
         const rows = result.data;
