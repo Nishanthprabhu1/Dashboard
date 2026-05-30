@@ -114,6 +114,8 @@ body { font-family: 'Poppins', sans-serif; background: var(--color-bg-page); col
 
 <script>
   const MANAGER_PIN = "7019"; 
+  
+  // This is your official active macro connection link verified across repository branches
   const SCRIPT_API_URL = 'https://script.google.com/macros/s/AKfycbzZ2zD5LzfrdLyQGGHgevXCCKlWqmr8Hcyx4L8s-WuDzzZYnuYEHWNUasco5lrIqMQV/exec';
 
   function checkAccess() {
@@ -144,9 +146,10 @@ body { font-family: 'Poppins', sans-serif; background: var(--color-bg-page); col
       loadingEl.style.display = 'block';
       loadingEl.textContent = 'Querying direct database grid points...';
       
-      // FIX: Standardize request redirects to let Google stream content natively across repos
+      // Explicit execution setup forcing browser redirection alignment across separate sub-repos
       const response = await fetch(SCRIPT_API_URL, {
         method: 'GET',
+        mode: 'cors',
         redirect: 'follow'
       });
       
