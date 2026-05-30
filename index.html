@@ -144,7 +144,6 @@ body { font-family: 'Poppins', sans-serif; background: var(--color-bg-page); col
       loadingEl.style.display = 'block';
       loadingEl.textContent = 'Querying direct database grid points...';
       
-      // Fixed cross-origin tracking parameters
       const response = await fetch(SCRIPT_API_URL);
       if (!response.ok) throw new Error("Cloud network data serialization anomaly.");
       
