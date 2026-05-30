@@ -88,15 +88,35 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
 /* ── MODAL BILL WINDOW ── */
 .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(4px); z-index: 1000; display: none; align-items: center; justify-content: center; }
 .modal-mask.show { display: flex; }
-.bill-popup { background: var(--bg-dark-surface); border: 1px solid var(--border-line); width: 100%; max-width: 420px; border-radius: 20px; overflow: hidden; }
+.bill-popup { background: var(--bg-dark-surface); border: 1px solid var(--border-line); width: 100%; max-width: 440px; border-radius: 20px; overflow: hidden; }
 .bill-pop-header { background: #1C2331; padding: 20px; border-bottom: 1px solid var(--border-line); display: flex; justify-content: space-between; align-items: center; }
 .bill-pop-header h2 { font-size: 16px; font-weight: 700; }
 .close-pop { font-size: 22px; cursor: pointer; color: var(--text-muted); }
 .bill-pop-body { padding: 20px; max-height: 260px; overflow-y: auto; }
 .bill-pop-item-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 12px; color: rgba(255,255,255,0.9); }
+.bill-pop-tax-section { border-top: 1px dashed var(--border-line); padding-top: 12px; margin-top: 4px; }
+.bill-pop-tax-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 8px; color: var(--text-muted); }
+
 .bill-pop-footer { padding: 20px; border-top: 1px solid var(--border-line); background: rgba(0,0,0,0.1); }
-.bill-pop-total-line { display: flex; justify-content: space-between; font-size: 16px; font-weight: 700; margin-bottom: 16px; }
-.paid-action-btn { width: 100%; background: var(--color-green); color: #fff; border: none; border-radius: 10px; padding: 14px; font-size: 14px; font-weight: 700; cursor: pointer; }
+.bill-pop-total-line { display: flex; justify-content: space-between; font-size: 16px; font-weight: 700; margin-bottom: 20px; }
+
+/* Dual Action POS Buttons */
+.modal-action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.action-btn { border: none; border-radius: 10px; padding: 14px 10px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: opacity 0.2s; }
+.action-btn:hover { opacity: 0.9; }
+.print-action-btn { background: var(--color-blue); color: #FFFFFF; }
+.paid-action-btn { background: var(--color-green); color: #FFFFFF; }
+
+/* ── SECTIONS DEDICATED TO SYSTEM PRINT PIPELINE ── */
+#printReceiptContainer { display: none; }
+@media print {
+  body * { display: none !important; }
+  #printReceiptContainer { display: block !important; width: 80mm; background: #fff !important; color: #000 !important; padding: 10px; font-family: monospace !important; font-size: 12px !important; }
+  #printReceiptContainer .center { text-align: center; margin-bottom: 10px; }
+  #printReceiptContainer .divider { border-bottom: 1px dashed #000; margin: 8px 0; }
+  #printReceiptContainer .item-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+  #printReceiptContainer .total-bold { font-weight: bold; font-size: 14px; }
+}
 </style>
 </head>
 <body style="display: none;" id="authWrapper">
@@ -178,22 +198,46 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
         <h2 id="modalTitleLabel">Table Details</h2>
         <span class="close-pop" onclick="closeBillModal()">×</span>
       </div>
-      <div class="bill-pop-body" id="modalBillItemsContainer"></div>
+      
+      <div class="bill-pop-body">
+        <div id="modalBillItemsContainer"></div>
+        
+        <div class="bill-pop-tax-section" id="taxBreakdownBlock" style="display:none;">
+          <div class="bill-pop-tax-row">
+            <span>Subtotal:</span>
+            <span id="modalTaxSubtotal">₹0</span>
+          </div>
+          <div class="bill-pop-tax-row">
+            <span>CGST (5%):</span>
+            <span id="modalTaxCGST">₹0</span>
+          </div>
+          <div class="bill-pop-tax-row">
+            <span>SGST (5%):</span>
+            <span id="modalTaxSGST">₹0</span>
+          </div>
+        </div>
+      </div>
+
       <div class="bill-pop-footer">
         <div class="bill-pop-total-line">
           <span>Amount Due:</span>
           <span id="modalBillTotalLabel">₹0</span>
         </div>
-        <button class="paid-action-btn" id="modalPaidActionButton">💳 Mark as Bill Paid</button>
+        
+        <div class="modal-action-grid" id="modalActionGridBlock">
+          <button class="action-btn print-action-btn" id="modalPrintActionButton">🖨️ Print Bill</button>
+          <button class="action-btn paid-action-btn" id="modalPaidActionButton">💳 Mark as Paid</button>
+        </div>
       </div>
     </div>
   </div>
+
+  <div id="printReceiptContainer"></div>
 
 <script>
   const MANAGER_PIN = "7019";
   const SPREADSHEET_ID = '1sFdtQFP7BdQQJ_0_SGbsqGh5kHV_VwvdtG3261-3-vk';
   
-  // PASTE YOUR LATEST DEPLOYED LIVE APPS SCRIPT EXEC MACRO URL HERE:
   const SCRIPT_API_URL = 'https://script.google.com/macros/s/AKfycbzzqQ-t9Pz16Bv5hIAn1Dly9F0b-u7vWwMv1_Mv5E7B7V5N9A7E1C7Rhs-PAgT3fTUD_-jR-UZ0aA/exec';
 
   const MENU_MAP = {
@@ -204,6 +248,8 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
 
   let mixChartInstance = null;
   let velocityChartInstance = null;
+  let activeTableContextData = null; 
+  let activeTableContextNum = null;
 
   function checkAccess() {
     const pin = prompt("🔑 Access Restricted. Enter Executive Manager PIN:");
@@ -277,9 +323,8 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
         const subtotal = parseFloat(columns[6]) || 0;
         const completeBill = columns[7] || '0';
         const orderStatus = columns[8] || 'New';
-        const globalPaidStatus = columns[9] || 'Unpaid'; // Reading Column J
+        const globalPaidStatus = columns[9] || 'Unpaid';
 
-        // IF THE ORDER IS GLOBALLY PAID, BYPASS ITS ACCUMULATION ON DASHBOARD AND TABLES INSTANTLY
         if(globalPaidStatus === "Paid") continue;
 
         totalLiveUnpaidOrdersCount++;
@@ -294,7 +339,7 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
         if(tableNum >= 1 && tableNum <= 12) {
           tableBillingTrackingHash[tableNum].occupied = true;
           tableBillingTrackingHash[tableNum].total += subtotal;
-          tableBillingTrackingHash[tableNum].items.push({ dishName, qty, subtotal });
+          tableBillingTrackingHash[tableNum].items.push({ dishName, qty, subtotal, price });
         }
 
         const tr = document.createElement('tr');
@@ -336,7 +381,7 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
       card.innerHTML = `
         <div class="cube-num">Table ${t}</div>
         <div class="cube-status">${isOccupied ? '⚠️ Occupied' : '🟢 Available'}</div>
-        <div class="cube-bill-label">Bill till now</div>
+        <div class="cube-bill-label">Bill Subtotal</div>
         <div class="cube-bill-val">${isOccupied ? '₹' + data.total.toLocaleString('en-IN') : '—'}</div>
       `;
       
@@ -349,13 +394,19 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
     const modal = document.getElementById('billModalOverlay');
     document.getElementById('modalTitleLabel').textContent = `POS Terminal · Settle Table ${tableNum}`;
     
+    activeTableContextNum = tableNum;
+    activeTableContextData = tableData;
+
     const container = document.getElementById('modalBillItemsContainer');
+    const taxBlock = document.getElementById('taxBreakdownBlock');
+    const actionGrid = document.getElementById('modalActionGridBlock');
     container.innerHTML = '';
 
     if(!tableData.occupied) {
       container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;">Table is currently empty.</div>';
+      taxBlock.style.display = 'none';
       document.getElementById('modalBillTotalLabel').textContent = '₹0';
-      document.getElementById('modalPaidActionButton').style.display = 'none';
+      actionGrid.style.display = 'none';
     } else {
       tableData.items.forEach(i => {
         const r = document.createElement('div');
@@ -364,17 +415,88 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
         container.appendChild(r);
       });
 
-      document.getElementById('modalBillTotalLabel').textContent = `₹${tableData.total.toLocaleString('en-IN')}`;
+      const subtotal = tableData.total;
+      const cgst = subtotal * 0.05;
+      const sgst = subtotal * 0.05;
+      const grossFinalTotal = subtotal + cgst + sgst;
+
+      document.getElementById('modalTaxSubtotal').textContent = `₹${subtotal.toLocaleString('en-IN')}`;
+      document.getElementById('modalTaxCGST').textContent = `₹${cgst.toLocaleString('en-IN')}`;
+      document.getElementById('modalTaxSGST').textContent = `₹${sgst.toLocaleString('en-IN')}`;
+      taxBlock.style.display = 'block';
+
+      document.getElementById('modalBillTotalLabel').textContent = `₹${grossFinalTotal.toLocaleString('en-IN')}`;
       
-      const actionBtn = document.getElementById('modalPaidActionButton');
-      actionBtn.style.display = 'block';
-      actionBtn.onclick = () => executeGlobalPaymentSettlement(tableNum);
+      actionGrid.style.display = 'grid';
+      document.getElementById('modalPrintActionButton').onclick = () => triggerPhysicalReceiptPrint();
+      document.getElementById('modalPaidActionButton').onclick = () => executeGlobalPaymentSettlement(tableNum);
     }
     modal.classList.add('show');
   }
 
+  function triggerPhysicalReceiptPrint() {
+    if (!activeTableContextData || !activeTableContextNum) return;
+
+    const subtotal = activeTableContextData.total;
+    const cgst = subtotal * 0.05;
+    const sgst = subtotal * 0.05;
+    const grandTotal = subtotal + cgst + sgst;
+
+    const printContainer = document.getElementById('printReceiptContainer');
+    
+    let itemsHtml = '';
+    activeTableContextData.items.forEach(i => {
+      itemsHtml += `
+        <div class="item-row">
+          <span>${i.dishName} x${i.qty}</span>
+          <span>₹${i.subtotal}</span>
+        </div>`;
+    });
+
+    printContainer.innerHTML = `
+      <div class="center">
+        <h3>CHEF NISHANTH</h3>
+        <p>Church Street Operations</p>
+        <p><b>POS RECEIPT</b></p>
+      </div>
+      <div class="divider"></div>
+      <div class="item-row">
+        <span><b>Table: Table ${activeTableContextNum}</b></span>
+        <span>Date: ${new Date().toLocaleDateString()}</span>
+      </div>
+      <div class="divider"></div>
+      ${itemsHtml}
+      <div class="divider"></div>
+      <div class="item-row">
+        <span>Subtotal:</span>
+        <span>₹${subtotal.toFixed(2)}</span>
+      </div>
+      <div class="item-row">
+        <span>CGST (5%):</span>
+        <span>₹${cgst.toFixed(2)}</span>
+      </div>
+      <div class="item-row">
+        <span>SGST (5%):</span>
+        <span>₹${sgst.toFixed(2)}</span>
+      </div>
+      <div class="divider"></div>
+      <div class="item-row total-bold">
+        <span>GRAND TOTAL:</span>
+        <span>₹${grandTotal.toFixed(2)}</span>
+      </div>
+      <div class="divider"></div>
+      <div class="center" style="margin-top: 15px;">
+        <p>Thank You! Visit Again.</p>
+      </div>
+    `;
+
+    window.print();
+  }
+
   function closeBillModal() {
     document.getElementById('billModalOverlay').classList.remove('show');
+    activeTableContextData = null;
+    activeTableContextNum = null;
   }
 
   async function executeGlobalPaymentSettlement(tableNum) {
@@ -385,14 +507,13 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
     document.getElementById('loadingElement').textContent = 'Broadcasting global settlement packet...';
 
     try {
-      // SENDS A TRUE POST DEPLOYMENT WEBHOOK DIRECT TO THE GOOGLE SHEET TO ATOMIZE COLUMN J VALUES FOR EVERY SERVER
       const response = await fetch(SCRIPT_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: "settleTable", table: tableNum })
       });
       
-      pullEcosystemData(); // Instantly pull refreshed spreadsheet ecosystem state rows
+      pullEcosystemData(); 
     } catch(err) {
       console.error(err);
       pullEcosystemData();
