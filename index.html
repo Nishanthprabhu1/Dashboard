@@ -536,11 +536,7 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
     }
     document.getElementById('kpiTables').textContent = activeCount;
 
-    // 4. ✅ SET LOCK — blocks auto-refresh from overwriting green state for 12s
-    settlementLock = true;
-    settlementLockTimestamp = Date.now();
-
-    // 5. Show toast notification
+    // 4. Show toast notification
     showToast(`✅ Table ${tableNum} cleared — marked as Paid!`);
 
     // 6. Fire backend update in background
@@ -554,8 +550,6 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
       console.error('Backend sync error:', err);
     }
 
-    // Lock expires after 12s — next auto-refresh will do full re-render
-    // with the updated sheet data (table will stay green since it's now Paid)
   }
 
   // ── TOAST HELPER ──
@@ -646,52 +640,10 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
     });
   }
 
-  // ── SMART AUTO REFRESH ──
-  // settlementLock: when true, data fetches skip re-rendering the floor
-  // so a just-paid table stays green even if the sheet hasn't updated yet
-  let settlementLock = false;
-  let settlementLockTimestamp = 0;
-  const LOCK_DURATION_MS = 12000; // hold lock for 12 seconds after payment
-
-  // Wrap pullEcosystemData to respect the lock
-  const originalPull = pullEcosystemData;
-  pullEcosystemData = async function() {
-    const now = Date.now();
-    // If lock is active and hasn't expired, skip floor render
-    if (settlementLock && (now - settlementLockTimestamp) < LOCK_DURATION_MS) {
-      // Still fetch sheet data but DON'T overwrite the floor hash or re-render floor
-      await pullEcosystemDataSilent();
-      return;
-    }
-    // Lock expired — clear it and do full render
-    settlementLock = false;
-    await originalPull();
-  };
-
-  // Silent fetch: updates KPI numbers + charts but keeps floor as-is
-  async function pullEcosystemDataSilent() {
-    try {
-      const csvUrl = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=Sheet1`;
-      const response = await fetch(csvUrl);
-      if (!response.ok) return;
-      const csvText = await response.text();
-      const rawLines = csvText.split(/\r?\n/);
-      const lines = rawLines.map(line =>
-        line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(cell => cell.replace(/^"|"$/g, '').trim())
-      );
-      let revenue = 0, orders = 0;
-      for (let i = 1; i < lines.length; i++) {
-        const c = lines[i];
-        if (!c[0] || c.length < 7) continue;
-        if ((c[9] || 'Unpaid') === 'Paid') continue;
-        revenue += parseFloat(c[6]) || 0;
-        orders++;
-      }
-      document.getElementById('kpiSales').textContent = '₹' + revenue.toLocaleString('en-IN');
-      document.getElementById('kpiOrders').textContent = orders;
-    } catch(e) { /* silent */ }
-  }
-
+  // ── AUTO REFRESH ──
+  // locallyPaidTables blocklist (defined above) permanently overrides sheet data.
+  // No lock, no timer, no expiry — once paid on this device it stays paid forever
+  // in this session. The blocklist enforcement inside pullEcosystemData handles everything.
   setInterval(() => { pullEcosystemData(); }, 15000);
 
   window.onload = checkAccess;
