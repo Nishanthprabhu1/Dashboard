@@ -278,6 +278,13 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
   // ✅ Global floor hash — persists between renders so we can mutate it instantly
   let globalFloorHash = {};
 
+  // ✅ PERMANENT LOCAL PAID BLOCKLIST
+  // Once a table is marked paid here, EVERY future refresh will treat it as
+  // vacant — regardless of what the sheet says — until the page is reloaded.
+  // This is the only reliable way to prevent flicker-back while Apps Script
+  // is still writing to the sheet.
+  const locallyPaidTables = new Set();
+
   // ── AUTH ──
   function checkAccess() {
     const pin = prompt("🔑 Access Restricted. Enter Executive Manager PIN:");
@@ -357,6 +364,8 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
         const globalPaidStatus = columns[9] || 'Unpaid';
 
         if (globalPaidStatus === "Paid") continue;
+        // ✅ Also skip rows for tables already paid on this device (sheet may not be updated yet)
+        if (locallyPaidTables.has(tableNum)) continue;
 
         totalLiveUnpaidOrdersCount++;
         runningRevenueTotal += subtotal;
@@ -380,6 +389,16 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
 
       // Commit fresh data to global hash
       globalFloorHash = freshFloorHash;
+
+      // ✅ BLOCKLIST ENFORCEMENT — force-clear any table already paid on this device
+      // This survives every auto-refresh until the page is reloaded.
+      locallyPaidTables.forEach(paidTable => {
+        if (globalFloorHash[paidTable]) {
+          globalFloorHash[paidTable].occupied = false;
+          globalFloorHash[paidTable].items = [];
+          globalFloorHash[paidTable].total = 0;
+        }
+      });
 
       for (let t = 1; t <= 12; t++) {
         if (globalFloorHash[t].occupied) uniqueActiveTablesCount++;
@@ -479,6 +498,9 @@ body { background: var(--bg-dark-core); color: var(--text-main); min-height: 100
   // ── PAYMENT SETTLEMENT — INSTANT GREEN FLIP ──
   async function executeGlobalPaymentSettlement(tableNum) {
     if (!confirm(`💳 Set Table ${tableNum} to paid? This clears it across all kitchen devices instantly.`)) return;
+
+    // ✅ ADD TO PERMANENT BLOCKLIST — this table will stay green on ALL future refreshes
+    locallyPaidTables.add(tableNum);
 
     // 1. Close the modal immediately
     closeBillModal();
