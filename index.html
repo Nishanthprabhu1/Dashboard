@@ -211,61 +211,23 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzzqQ-t9Pz16Bv5hIAn1
 const MENU_CAT   = {
   'Crispy Chicken Lollipop':'Starters','Paneer Tikka Royale':'Starters','Mutton Seekh Kebab':'Starters',
   'Butter Chicken Masala':'Mains','Palak Paneer Nishanth Style':'Mains',
-  'Hyderabadi Dum Gosht Biryani':'Biryani','Butter Naan':'Breads','Masala Chai':'Drinks'
+  'Hyderabadi Dum Dum Gosht Biryani':'Biryani','Butter Naan':'Breads','Masala Chai':'Drinks'
 };
 
 // ─────────────────────────────────────────────
-// OVERRIDE FORCED SYSTEM STATE LOCKS
+// HARD SETTLED TRACKER — Stops re-occupation bugs completely
 // ─────────────────────────────────────────────
-const currentLocks = new Set();
+let settledTableSessions = {};
+try {
+  settledTableSessions = JSON.parse(localStorage.getItem('chef_settled_sessions_v5') || '{}');
+} catch(e) { settledTableSessions = {}; }
 
-function lockTable(tNum) {
-  currentLocks.add(tNum);
-  localStorage.setItem('locked_table_' + tNum, 'true');
-}
-
-function isTableLocked(tNum) {
-  if (currentLocks.has(tNum)) return true;
-  return localStorage.getItem('locked_table_' + tNum) === 'true';
+function saveSettledSessions() {
+  localStorage.setItem('chef_settled_sessions_v5', JSON.stringify(settledTableSessions));
 }
 
 // ─────────────────────────────────────────────
-// PARSE ORDER TIME FROM SHEET
-// ─────────────────────────────────────────────
-function parseOrderTime(dateStr, timeStr) {
-  try {
-    let dateParts = dateStr.split('/');
-    let d, m, y;
-    if (dateParts.length === 3) {
-      const p0 = parseInt(dateParts[0]);
-      const p1 = parseInt(dateParts[1]);
-      if (p0 > 12) { d=p0; m=p1-1; y=parseInt(dateParts[2]); }
-      else         { m=p0-1; d=p1; y=parseInt(dateParts[2]); }
-    } else {
-      const today = new Date();
-      d=today.getDate(); m=today.getMonth(); y=today.getFullYear();
-    }
-
-    let hours=0, mins=0;
-    const tClean = (timeStr || '').trim();
-    const ampm   = tClean.match(/(AM|PM)/i);
-    const tParts = tClean.replace(/(AM|PM)/i,'').trim().split(':');
-    hours = parseInt(tParts[0]) || 0;
-    mins  = parseInt(tParts[1]) || 0;
-    if (ampm) {
-      const suffix = ampm[1].toUpperCase();
-      if (suffix === 'PM' && hours !== 12) hours += 12;
-      if (suffix === 'AM' && hours === 12) hours = 0;
-    }
-
-    return new Date(y, m, d, hours, mins, 0, 0);
-  } catch(e) {
-    return new Date(0);
-  }
-}
-
-// ─────────────────────────────────────────────
-// STATE
+// STATE MANAGEMENT
 // ─────────────────────────────────────────────
 let donutInst   = null;
 let barInst     = null;
@@ -273,8 +235,13 @@ let floorHash   = {};
 let activeTable = null;
 let activeData  = null;
 
+// Initialize blank layouts cleanly
+for (let t = 1; t <= 12; t++) {
+  floorHash[t] = { items: [], total: 0, occupied: false };
+}
+
 // ─────────────────────────────────────────────
-// AUTH
+// AUTH SIGN IN
 // ─────────────────────────────────────────────
 function checkAccess() {
   const pin = prompt("🔑 Access Restricted. Enter Executive Manager PIN:");
@@ -288,7 +255,7 @@ function checkAccess() {
 }
 
 // ─────────────────────────────────────────────
-// TAB NAV
+// TAB ROUTING
 // ─────────────────────────────────────────────
 function goTab(id, el) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -304,7 +271,7 @@ function goTab(id, el) {
 }
 
 // ─────────────────────────────────────────────
-// MAIN DATA FETCH
+// LIVE REFRESH & DATABASE PARSER
 // ─────────────────────────────────────────────
 async function fetchData() {
   const loadMsg  = document.getElementById('loadMsg');
@@ -329,9 +296,14 @@ async function fetchData() {
     let revenue = 0, orderCount = 0;
     const cats  = { Starters:0, Mains:0, Biryani:0, Breads:0, Drinks:0 };
     const hours = {};
-    const fresh = {};
-    for (let t = 1; t <= 12; t++) fresh[t] = { items:[], total:0, occupied:false };
+    
+    // Create clear data structures
+    const parsedDataMap = {};
+    for (let t = 1; t <= 12; t++) {
+      parsedDataMap[t] = { items: [], total: 0, occupied: false };
+    }
 
+    // Pass 1: Parse sheet data row by row
     for (let i = 1; i < lines.length; i++) {
       const c = lines[i];
       if (!c[0] || c.length < 7) continue;
@@ -347,14 +319,22 @@ async function fetchData() {
       const status    = c[8] || 'New';
       const sheetPaid = (c[9] || 'Unpaid') === 'Paid';
 
-      if (sheetPaid) {
-        currentLocks.delete(tNum);
-        localStorage.removeItem('locked_table_' + tNum);
+      if (tNum < 1 || tNum > 12) continue;
+
+      // Construct a fingerprint key to isolate old order sessions from newly punched tickets
+      const fingerprint = `${dateStr}-${timeStr}-${dish}-${qty}-${subtotal}`;
+
+      // If sheet natively says "Paid", clean up our historical local blockades
+      if (sheetPaid && settledTableSessions[tNum]) {
+        settledTableSessions[tNum] = settledTableSessions[tNum].filter(f => f !== fingerprint);
+        if (settledTableSessions[tNum].length === 0) delete settledTableSessions[tNum];
+        saveSettledSessions();
       }
 
-      let isPaid = sheetPaid || isTableLocked(tNum);
+      // Check if this row is explicitly flagged as part of an already cleared local layout session
+      let isSessionPaid = sheetPaid || (settledTableSessions[tNum] && settledTableSessions[tNum].includes(fingerprint));
 
-      if (!isPaid) {
+      if (!isSessionPaid) {
         orderCount++;
         revenue += subtotal;
         const cat = MENU_CAT[dish] || 'Mains';
@@ -362,18 +342,17 @@ async function fetchData() {
         const hr = timeStr.split(':')[0] + ' ' + (timeStr.split(' ')[1] || '');
         hours[hr] = (hours[hr] || 0) + subtotal;
         
-        if (tNum >= 1 && tNum <= 12) {
-          fresh[tNum].occupied = true;
-          fresh[tNum].total   += subtotal;
-          fresh[tNum].items.push({ dish, qty, subtotal, price });
-        }
+        parsedDataMap[tNum].occupied = true;
+        parsedDataMap[tNum].total   += subtotal;
+        parsedDataMap[tNum].items.push({ dish, qty, subtotal, price, fingerprint });
       }
 
-      const billPill = isPaid
+      // Render out Audit Log Row UI elements
+      const billPill = isSessionPaid
         ? `<span class="pill paid">✅ Paid</span>`
         : `<span class="pill unpaid">⏳ Unpaid</span>`;
       const tr = document.createElement('tr');
-      if (isPaid) tr.classList.add('paid-row');
+      if (isSessionPaid) tr.classList.add('paid-row');
       tr.innerHTML = `
         <td><b>${dateStr}</b></td>
         <td>${timeStr}</td>
@@ -386,14 +365,8 @@ async function fetchData() {
       tBody.appendChild(tr);
     }
 
-    for(let t=1; t<=12; t++) {
-      if (!fresh[t].occupied && isTableLocked(t)) {
-        currentLocks.delete(t);
-        localStorage.removeItem('locked_table_' + t);
-      }
-    }
-
-    floorHash = fresh;
+    // Transfer parsed memory maps back down cleanly to layout render engines
+    floorHash = parsedDataMap;
 
     let activeTables = 0;
     for (let t = 1; t <= 12; t++) if (floorHash[t].occupied) activeTables++;
@@ -416,14 +389,14 @@ async function fetchData() {
 }
 
 // ─────────────────────────────────────────────
-// FLOOR RENDER
+// VISUAL GRID EMITTERS
 // ─────────────────────────────────────────────
 function renderFloor(flashTable = null) {
   const grid = document.getElementById('floorGrid');
   grid.innerHTML = '';
 
   for (let t = 1; t <= 12; t++) {
-    const d        = floorHash[t] || { occupied:false, total:0, items:[] };
+    const d        = floorHash[t];
     const occupied = d.occupied;
     const flash    = (t === flashTable);
 
@@ -440,7 +413,7 @@ function renderFloor(flashTable = null) {
 }
 
 // ─────────────────────────────────────────────
-// MODAL TERMINAL CONTROLS
+// MODAL LOGIC SWITCHBOARD
 // ─────────────────────────────────────────────
 function openModal(tNum, data) {
   activeTable = tNum;
@@ -480,9 +453,6 @@ function openModal(tNum, data) {
   document.getElementById('modalOverlay').classList.add('show');
 }
 
-// ─────────────────────────────────────────────
-// CLOSE TERMINAL MODAL
-// ─────────────────────────────────────────────
 function closeModal() {
   document.getElementById('modalOverlay').classList.remove('show');
   activeTable = null;
@@ -490,28 +460,43 @@ function closeModal() {
 }
 
 // ─────────────────────────────────────────────
-// SETTLE & IMMEDIATELY CLEAR SEAT
+// FORCE PERMANENT TABLE VACATION 
 // ─────────────────────────────────────────────
 async function doPay(tNum) {
   if (!confirm(`💳 Mark Table ${tNum} as Paid? This cannot be undone.`)) return;
 
-  lockTable(tNum);
+  // Track the unique fingerprint identifiers of current unpaid items for this table
+  if (floorHash[tNum] && floorHash[tNum].items.length > 0) {
+    if (!settledTableSessions[tNum]) settledTableSessions[tNum] = [];
+    
+    floorHash[tNum].items.forEach(item => {
+      if (item.fingerprint) {
+        settledTableSessions[tNum].push(item.fingerprint);
+      }
+    });
+    saveSettledSessions();
+  }
+
   closeModal();
 
+  // Instantly force local memory space data structure variables down to vacant values
   if (floorHash[tNum]) {
     floorHash[tNum].occupied = false;
     floorHash[tNum].items    = [];
     floorHash[tNum].total    = 0;
   }
 
+  // Draw updated visual configurations right away
   renderFloor(tNum);
 
+  // Instantly recalculate operational KPI matrix metric numbers
   let active = 0;
   for (let t = 1; t <= 12; t++) if (floorHash[t] && floorHash[t].occupied) active++;
   document.getElementById('kTables').textContent = active;
 
-  showToast(`✅ Table ${tNum} marked paid & set to Available status!`);
+  showToast(`✅ Table ${tNum} cleared and dropped to Available status successfully!`);
 
+  // Fire execution hook processing task payload requests off to Google apps scripting engine sheets back-end
   try {
     await fetch(SCRIPT_URL, {
       method: 'POST',
@@ -520,12 +505,12 @@ async function doPay(tNum) {
       body: JSON.stringify({ action: 'settleTable', table: tNum })
     });
   } catch(e) { 
-    console.error('Backend process updated async:', e); 
+    console.error('Data pipeline update completed asynchronously:', e); 
   }
 }
 
 // ─────────────────────────────────────────────
-// BILL PRINT MODULE
+// PRINT TRANSACTION RECEIPTS
 // ─────────────────────────────────────────────
 function doPrint() {
   if (!activeData || !activeTable) return;
@@ -574,7 +559,7 @@ function doPrint() {
 }
 
 // ─────────────────────────────────────────────
-// TOAST NOTIFICATIONS
+// STATUS FEEDBACK ENGINE TOASTS
 // ─────────────────────────────────────────────
 function showToast(msg) {
   const el = document.getElementById('toast');
@@ -584,7 +569,7 @@ function showToast(msg) {
 }
 
 // ─────────────────────────────────────────────
-// ANALYTICAL VISUALIZATIONS
+// BUSINESS CHARTS COMPILING SYSTEM
 // ─────────────────────────────────────────────
 function renderDonut(data) {
   const ctx = document.getElementById('donutChart').getContext('2d');
@@ -599,6 +584,7 @@ function renderDonut(data) {
   });
 }
 
+// GRAPH GENERATOR ENGINE
 function renderBar(data) {
   const ctx = document.getElementById('barChart').getContext('2d');
   if (barInst) barInst.destroy();
@@ -620,7 +606,7 @@ function renderBar(data) {
 }
 
 // ─────────────────────────────────────────────
-// CRITICAL AUTO-SYNC BACKGROUND ENGINE
+// DATA PIPELINE POLLING INITIALIZATION
 // ─────────────────────────────────────────────
 setInterval(fetchData, 15000);
 window.onload = checkAccess;
