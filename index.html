@@ -215,47 +215,18 @@ const MENU_CAT   = {
 };
 
 // ─────────────────────────────────────────────
-// PAYMENT LOCK — stored in localStorage
+// OVERRIDE FORCED SYSTEM STATE LOCKS
 // ─────────────────────────────────────────────
-const LS_KEY = 'chefNishanth_paymentLocks_v4';
-
-function getLocks() {
-  try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); }
-  catch(e) { return {}; }
-}
-function saveLocks(obj) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(obj)); } catch(e) {}
-}
-
-function floorToMinute(dateObj) {
-  const d = new Date(dateObj);
-  d.setSeconds(0, 0);
-  return d;
-}
+const currentLocks = new Set();
 
 function lockTable(tNum) {
-  const locks = getLocks();
-  locks[tNum] = floorToMinute(new Date()).toISOString();
-  saveLocks(locks);
-  console.log(`[POS] Table ${tNum} locked at ${locks[tNum]}`);
+  currentLocks.add(tNum);
+  localStorage.setItem('locked_table_' + tNum, 'true');
 }
 
-function getTableLockTime(tNum) {
-  const locks = getLocks();
-  return locks[tNum] ? new Date(locks[tNum]) : null;
-}
-
-function clearOldLocks() {
-  const locks = getLocks();
-  const now   = Date.now();
-  let changed = false;
-  for (const t in locks) {
-    if (now - new Date(locks[t]).getTime() > 86400000) {
-      delete locks[t];
-      changed = true;
-    }
-  }
-  if (changed) saveLocks(locks);
+function isTableLocked(tNum) {
+  if (currentLocks.has(tNum)) return true;
+  return localStorage.getItem('locked_table_' + tNum) === 'true';
 }
 
 // ─────────────────────────────────────────────
@@ -293,13 +264,6 @@ function parseOrderTime(dateStr, timeStr) {
   }
 }
 
-function isRowPaidByLock(tNum, dateStr, timeStr) {
-  const lockTime = getTableLockTime(tNum);
-  if (!lockTime) return false;
-  const orderTime = parseOrderTime(dateStr, timeStr);
-  return orderTime < lockTime;
-}
-
 // ─────────────────────────────────────────────
 // STATE
 // ─────────────────────────────────────────────
@@ -313,7 +277,6 @@ let activeData  = null;
 // AUTH
 // ─────────────────────────────────────────────
 function checkAccess() {
-  clearOldLocks();
   const pin = prompt("🔑 Access Restricted. Enter Executive Manager PIN:");
   if (pin === PIN) {
     document.getElementById('root').style.display = 'flex';
@@ -384,10 +347,12 @@ async function fetchData() {
       const status    = c[8] || 'New';
       const sheetPaid = (c[9] || 'Unpaid') === 'Paid';
 
-      let isPaid = sheetPaid;
-      if (!sheetPaid && tNum >= 1 && tNum <= 12) {
-        isPaid = isRowPaidByLock(tNum, dateStr, timeStr);
+      if (sheetPaid) {
+        currentLocks.delete(tNum);
+        localStorage.removeItem('locked_table_' + tNum);
       }
+
+      let isPaid = sheetPaid || isTableLocked(tNum);
 
       if (!isPaid) {
         orderCount++;
@@ -396,6 +361,7 @@ async function fetchData() {
         if (cats[cat] !== undefined) cats[cat] += subtotal;
         const hr = timeStr.split(':')[0] + ' ' + (timeStr.split(' ')[1] || '');
         hours[hr] = (hours[hr] || 0) + subtotal;
+        
         if (tNum >= 1 && tNum <= 12) {
           fresh[tNum].occupied = true;
           fresh[tNum].total   += subtotal;
@@ -418,6 +384,13 @@ async function fetchData() {
         <td><span class="pill new">${status}</span></td>
         <td>${billPill}</td>`;
       tBody.appendChild(tr);
+    }
+
+    for(let t=1; t<=12; t++) {
+      if (!fresh[t].occupied && isTableLocked(t)) {
+        currentLocks.delete(t);
+        localStorage.removeItem('locked_table_' + t);
+      }
     }
 
     floorHash = fresh;
@@ -507,6 +480,9 @@ function openModal(tNum, data) {
   document.getElementById('modalOverlay').classList.add('show');
 }
 
+// ─────────────────────────────────────────────
+// CLOSE TERMINAL MODAL
+// ─────────────────────────────────────────────
 function closeModal() {
   document.getElementById('modalOverlay').classList.remove('show');
   activeTable = null;
@@ -519,30 +495,23 @@ function closeModal() {
 async function doPay(tNum) {
   if (!confirm(`💳 Mark Table ${tNum} as Paid? This cannot be undone.`)) return;
 
-  // 1. Immediately apply the local timestamp lock
   lockTable(tNum);
-
-  // 2. Clear UI modal state instantly
   closeModal();
 
-  // 3. Wipe out table state immediately before backend finishes processing
   if (floorHash[tNum]) {
     floorHash[tNum].occupied = false;
     floorHash[tNum].items    = [];
     floorHash[tNum].total    = 0;
   }
 
-  // 4. Force state to update on screen immediately
   renderFloor(tNum);
 
-  // 5. Instantly subtract from Active Dining Tables KPI
   let active = 0;
   for (let t = 1; t <= 12; t++) if (floorHash[t] && floorHash[t].occupied) active++;
   document.getElementById('kTables').textContent = active;
 
   showToast(`✅ Table ${tNum} marked paid & set to Available status!`);
 
-  // 6. Post payment to server securely using no-cors parameters
   try {
     await fetch(SCRIPT_URL, {
       method: 'POST',
@@ -551,7 +520,7 @@ async function doPay(tNum) {
       body: JSON.stringify({ action: 'settleTable', table: tNum })
     });
   } catch(e) { 
-    console.error('Backend operation processed asynchronously:', e); 
+    console.error('Backend process updated async:', e); 
   }
 }
 
